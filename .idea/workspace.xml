@@ -2,14 +2,7 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="c0e2ca25-1340-40c3-a242-d93257eb8a5f" name="Default" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Command/InstallSupervisorDaemonCommand.php" beforeDir="false" afterPath="$PROJECT_DIR$/Command/InstallSupervisorDaemonCommand.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Command/StartSupervisorDaemonCommand.php" beforeDir="false" afterPath="$PROJECT_DIR$/Command/StartSupervisorDaemonCommand.php" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/Daemons/Supervisor/SupervisorDaemon.php" beforeDir="false" afterPath="$PROJECT_DIR$/Daemons/Supervisor/SupervisorDaemon.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Daemons/Supervisor/confs/template.conf" beforeDir="false" afterPath="$PROJECT_DIR$/Daemons/Supervisor/confs/template.conf" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/DependencyInjection/BozoslivehereSupervisorDaemonExtension.php" beforeDir="false" afterPath="$PROJECT_DIR$/DependencyInjection/BozoslivehereSupervisorDaemonExtension.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/DependencyInjection/Configuration.php" beforeDir="false" afterPath="$PROJECT_DIR$/DependencyInjection/Configuration.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/composer.json" beforeDir="false" afterPath="$PROJECT_DIR$/composer.json" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="TRACKING_ENABLED" value="true" />
@@ -38,8 +31,17 @@
       <file leaf-file-name="SupervisorDaemon.php" pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/Daemons/Supervisor/SupervisorDaemon.php">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="282">
-              <caret line="55" column="27" lean-forward="true" selection-start-line="55" selection-start-column="27" selection-end-line="55" selection-end-column="27" />
+            <state relative-caret-position="554">
+              <caret line="389" column="85" selection-start-line="389" selection-start-column="43" selection-end-line="389" selection-end-column="85" />
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file leaf-file-name="Daemon.php" pinned="false" current-in-tab="true">
+        <entry file="file://$PROJECT_DIR$/Entity/Daemon.php">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="51">
+              <caret line="3" column="32" lean-forward="true" selection-start-line="3" selection-start-column="32" selection-end-line="3" selection-end-column="32" />
             </state>
           </provider>
         </entry>
@@ -71,7 +73,7 @@
           </provider>
         </entry>
       </file>
-      <file leaf-file-name="Configuration.php" pinned="false" current-in-tab="true">
+      <file leaf-file-name="Configuration.php" pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/DependencyInjection/Configuration.php">
           <provider selected="true" editor-type-id="text-editor">
             <state relative-caret-position="272">
@@ -83,8 +85,8 @@
       <file leaf-file-name="composer.json" pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/composer.json">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="136">
-              <caret line="8" column="37" lean-forward="true" selection-start-line="8" selection-start-column="37" selection-end-line="8" selection-end-column="37" />
+            <state relative-caret-position="272">
+              <caret line="16" column="51" lean-forward="true" selection-start-line="16" selection-start-column="51" selection-end-line="16" selection-end-column="51" />
             </state>
           </provider>
         </entry>
@@ -229,12 +231,12 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1526417034334</updated>
-      <workItem from="1526417036071" duration="2904000" />
+      <workItem from="1526417036071" duration="3157000" />
     </task>
     <servers />
   </component>
   <component name="TimeTrackingManager">
-    <option name="totallyTimeSpent" value="2904000" />
+    <option name="totallyTimeSpent" value="3157000" />
   </component>
   <component name="ToolWindowManager">
     <frame x="-8" y="0" width="1507" height="1084" extended-state="0" />
@@ -268,13 +270,6 @@
     <option name="myLimit" value="2678400000" />
   </component>
   <component name="editorHistoryManager">
-    <entry file="file://$PROJECT_DIR$/composer.json">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="136">
-          <caret line="8" column="37" lean-forward="true" selection-start-line="8" selection-start-column="37" selection-end-line="8" selection-end-column="37" />
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/Command/InstallSupervisorDaemonCommand.php">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="-1604">
@@ -299,13 +294,6 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/Daemons/Supervisor/SupervisorDaemon.php">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="282">
-          <caret line="55" column="27" lean-forward="true" selection-start-line="55" selection-start-column="27" selection-end-line="55" selection-end-column="27" />
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/DependencyInjection/BozoslivehereSupervisorDaemonExtension.php">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="340">
@@ -317,6 +305,27 @@
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="272">
           <caret line="17" column="34" selection-start-line="17" selection-start-column="34" selection-end-line="17" selection-end-column="34" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/composer.json">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="272">
+          <caret line="16" column="51" lean-forward="true" selection-start-line="16" selection-start-column="51" selection-end-line="16" selection-end-column="51" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/Daemons/Supervisor/SupervisorDaemon.php">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="554">
+          <caret line="389" column="85" selection-start-line="389" selection-start-column="43" selection-end-line="389" selection-end-column="85" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/Entity/Daemon.php">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="51">
+          <caret line="3" column="32" lean-forward="true" selection-start-line="3" selection-start-column="32" selection-end-line="3" selection-end-column="32" />
         </state>
       </provider>
     </entry>

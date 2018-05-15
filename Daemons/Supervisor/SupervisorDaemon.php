@@ -155,7 +155,7 @@ abstract class SupervisorDaemon
         /** @var EntityManager $manager */
         $manager = $this->getManager();
         /** @var Daemon $daemon */
-        $daemon = $manager->getRepository('IminBundle:Daemon')->findOneBy([
+        $daemon = $manager->getRepository('BozoslivehereSupervisorDaemonBundle:Daemon')->findOneBy([
             'name' => static::getName(),
             'host' => gethostname()
         ]);
@@ -270,7 +270,7 @@ abstract class SupervisorDaemon
     public static final function getName()
     {
         if (get_called_class() == get_class()) {
-            // dont treat abstract IminDaemon as a valid daemon
+            // dont treat abstract SupervisorDaemon as a valid daemon
             return null;
         }
         $classname = get_called_class();
@@ -341,7 +341,7 @@ abstract class SupervisorDaemon
         /** @var EntityManager $manager */
         $manager = $container->get('doctrine.orm.entity_manager');
         /** @var Daemon $daemon */
-        $daemon = $manager->getRepository('IminBundle:Daemon')->findOneBy([
+        $daemon = $manager->getRepository('BozoslivehereSupervisorDaemonBundle:Daemon')->findOneBy([
             'name' => static::getName(),
             'host' => gethostname()
         ]);
@@ -370,7 +370,7 @@ abstract class SupervisorDaemon
         /** @var EntityManager $manager */
         $manager = $container->get('doctrine.orm.entity_manager');
         /** @var Daemon $daemon */
-        $daemon = $manager->getRepository('IminBundle:Daemon')->findOneBy([
+        $daemon = $manager->getRepository('BozoslivehereSupervisorDaemonBundle:Daemon')->findOneBy([
             'name' => static::getName(),
             'host' => gethostname()
         ]);
@@ -387,7 +387,7 @@ abstract class SupervisorDaemon
         /** @var EntityManager $manager */
         $manager = $container->get('doctrine.orm.entity_manager');
         /** @var Daemon $daemon */
-        $daemon = $manager->getRepository('IminBundle:Daemon')->findOneBy([
+        $daemon = $manager->getRepository('BozoslivehereSupervisorDaemonBundle:Daemon')->findOneBy([
             'name' => static::getName(),
             'host' => gethostname()
         ]);
