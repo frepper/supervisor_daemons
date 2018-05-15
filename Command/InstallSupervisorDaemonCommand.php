@@ -132,7 +132,6 @@ class InstallSupervisorDaemonCommand extends ContainerAwareCommand {
             $output->writeln('<error>Aborting mission!</error>');
             return;
         }
-        //$this->daemons = SupervisorDaemon::getDaemons();
         if ($input->getOption('all')) {
             foreach($this->daemons as $name => $daemon) {
                 $this->handleDaemon($input, $output, $name);

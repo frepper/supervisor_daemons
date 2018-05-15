@@ -42,7 +42,6 @@ class StartSupervisorDaemonCommand extends ContainerAwareCommand {
         }
         $daemonName = $input->getArgument('id');
         $daemons = $this->getDaemons();
-        dump($daemons);
         if (!isset($daemons[$daemonName])) {
             $output->write("Daemon not found: $daemonName");
             return;
