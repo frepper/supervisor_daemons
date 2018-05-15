@@ -1,0 +1,4 @@
+services:
+#    bozoslivehere_supervisor_daemon.example:
+#        class: Bozoslivehere\SupervisorDaemonBundle\Example
+#        arguments: ["@service_id", "plain_value", "%parameter%"]
