@@ -2,7 +2,10 @@
   "name": "bozoslivehere/supervisor-daemon-bundle",
   "type": "symfony-bundle",
   "description": "Symfony Daemons for Supervisor",
-  "keywords": ["Daemon", "Supervisor"],
+  "keywords": [
+    "Daemon",
+    "Supervisor"
+  ],
   "authors": [
     {
       "name": "Alfons de graaf",
@@ -13,6 +16,13 @@
     "php": "^7.0"
   },
   "autoload": {
-    "psr-4": { "Bozoslivehere\\SupervisorDaemonBundle\\": "" }
+    "psr-4": {
+      "Bozoslivehere\\SupervisorDaemonBundle\\": ""
+    }
+  },
+  "extra": {
+    "branch-alias": {
+      "dev-master": "1.0.0"
+    }
   }
 }
