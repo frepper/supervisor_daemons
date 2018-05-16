@@ -44,6 +44,11 @@ class InstallSupervisorDaemonCommand extends ContainerAwareCommand {
         }
     }
 
+    private function getDaemons() {
+        $daemonChain = $this->getContainer()->get('bozoslivehere_supervisor_daemon.daemon_chain');
+        return $daemonChain->getDaemons();
+    }
+
     protected function interact(InputInterface $input, OutputInterface $output) {
         if ($this->aborted) {
             return;
@@ -51,17 +56,17 @@ class InstallSupervisorDaemonCommand extends ContainerAwareCommand {
         $daemonName = $this->daemonName;
         $uninstall = $this->uninstall;
         if (!$input->getOption('all') && empty($daemonName)) {
-            $daemons = $this->getContainer()->getParameter('bozoslivehere_supervisor_daemon_daemons');
+            $daemons = $this->getDaemons();
             if (empty($daemons)) {
-                $output->writeln('No daemons found, plz specify them in your config.');
+                $output->writeln('No daemons found, plz specify them in your services config.');
                 $this->aborted = true;
                 return;
             }
             $names = [];
             $output->writeln('');
-            foreach ($daemons as $name) {
+            foreach ($daemons as $name => $service) {
                 $names[] = $name;
-                $class = get_class($this->getContainer()->get($name));
+                $class = get_class($service);
                 $output->writeln($name . ' (' . $class . ')');
                 $this->daemons[$name] = $class;
             }
@@ -87,6 +92,13 @@ class InstallSupervisorDaemonCommand extends ContainerAwareCommand {
         }
     }
 
+    /**
+     * Very verbose daemon handling
+     *
+     * @param InputInterface $input
+     * @param OutputInterface $output
+     * @param $daemonName
+     */
     protected function handleDaemon(InputInterface $input, OutputInterface $output, $daemonName) {
         $daemon = $this->daemons[$daemonName];
         if ($daemon::isInstalled()) {
@@ -102,7 +114,7 @@ class InstallSupervisorDaemonCommand extends ContainerAwareCommand {
             } else {
                 $output->writeln("<info>{$daemonName} is currently not running</info>");
             }
-            if ($daemon::uninstall($this->getContainer())) {
+            if ($daemon::uninstall($this->getContainer(), $daemonName)) {
                 $output->writeln("<info>{$daemonName} was uninstalled</info>");
             } else {
                 $output->writeln("<error>{$daemonName} could not be uninstalled</error>");
@@ -112,7 +124,7 @@ class InstallSupervisorDaemonCommand extends ContainerAwareCommand {
             $output->writeln("<info>{$daemonName} is currently not installed</info>");
         }
         if (!$input->getOption('uninstall')) {
-            if ($daemon::install($this->getContainer())) {
+            if ($daemon::install($this->getContainer(), $daemonName)) {
                 $output->writeln("<info>{$daemonName} was installed</info>");
                 if ($this->start) {
                     if ($daemon::start()) {

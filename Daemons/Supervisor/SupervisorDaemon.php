@@ -2,13 +2,13 @@
 
 namespace Bozoslivehere\SupervisorDaemonBundle\Daemons\Supervisor;
 
-use Doctrine\ORM\EntityManager;
 use Bozoslivehere\SupervisorDaemonBundle\Entity\Daemon;
-use Monolog\Logger;
-use Monolog\Handler\RotatingFileHandler;
-use Symfony\Component\DependencyInjection\ContainerInterface;
-use Bozoslivehere\SupervisorDaemonBundle\Utils\Utils;
 use Bozoslivehere\SupervisorDaemonBundle\Helpers\ShellHelper;
+use Bozoslivehere\SupervisorDaemonBundle\Utils\Utils;
+use Doctrine\ORM\EntityManager;
+use Monolog\Handler\RotatingFileHandler;
+use Monolog\Logger;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 
 abstract class SupervisorDaemon
 {
@@ -40,10 +40,12 @@ abstract class SupervisorDaemon
     private $currentIteration = 0;
     protected $paused = false;
     protected $pid;
-    private static $daemons;
+    private static $daemons = [];
+    protected static $name;
     protected static $extension = '.conf';
+    protected static $errors = [];
 
-    static protected $_sigHandlers = [
+    static protected $sigHandlers = [
         SIGHUP => array(__CLASS__, 'defaultSigHandler'),
         SIGINT => array(__CLASS__, 'defaultSigHandler'),
         SIGUSR1 => array(__CLASS__, 'defaultSigHandler'),
@@ -62,31 +64,36 @@ abstract class SupervisorDaemon
      */
     protected $container;
 
+    /**
+     * SupervisorDaemon constructor.
+     * @param ContainerInterface $container
+     * @param int $logLevel
+     */
     public function __construct(ContainerInterface $container, $logLevel = Logger::ERROR)
     {
         $this->setContainer($container);
         $this->pid = getmypid();
-        $this->logger = new Logger(static::getName() . '_logger');
-        $this->logger->pushHandler(new RotatingFileHandler($this->getLogFilename(), 10, $logLevel, true, 0777));
-        $this->logger->info('Setting up: ' . get_called_class(), ['pid' => $this->pid]);
-        foreach (self::$_sigHandlers as $signal => $handler) {
-            if (is_string($signal) || !$signal) {
-                if (defined($signal) && ($const = constant($signal))) {
-                    self::$_sigHandlers[$const] = $handler;
-                }
-                unset(self::$_sigHandlers[$signal]);
-            }
-        }
-        foreach (self::$_sigHandlers as $signal => $handler) {
-            if (!pcntl_signal($signal, $handler)) {
-                $this->logger->info('Could not bind signal: ' . $signal);
-            }
-        }
+        $this->logger = $this->initializeLogger();
+        $this->attachHandlers();
     }
 
+    /**
+     * SupervisorDaemon destructor.
+     * There's no garantee this will be called, when the daemon is stopped by 'kill -9' for example
+     */
+    public function __destruct()
+    {
+        $this->teardown();
+    }
+
+    /**
+     * Any incoming pcntl signals will be handled here
+     * receiving any signal will interrupt usleep
+     *
+     * @param $signo
+     */
     public final function defaultSigHandler($signo)
     {
-        // receiving any signal will interrupt usleep.....
         switch ($signo) {
             case SIGTERM:
                 $this->terminate('Received signal: SIGTERM');
@@ -108,9 +115,13 @@ abstract class SupervisorDaemon
         }
     }
 
+    /**
+     * Our main eventloop, loops until terminated or maxIterations is reached
+     *
+     * @param array $options
+     */
     public function run($options = [])
     {
-        // http://stackoverflow.com/questions/14060507/doctrine2-connection-timeout-in-daemon
         $this->options = array_merge($this->options, $options);
         $this->setup();
         while (!$this->terminated) {
@@ -118,7 +129,6 @@ abstract class SupervisorDaemon
                 $this->logger->addInfo(static::getName() . ' is pauzed, skipping iterate');
             } else {
                 $this->checkin();
-                $this->currentIteration++;
                 try {
                     $this->iterate();
                 } catch (\Exception $error) {
@@ -128,6 +138,7 @@ abstract class SupervisorDaemon
                 }
             }
             usleep($this->timeout);
+            $this->currentIteration++;
             if ($this->currentIteration == $this->maxIterations) {
                 $this->terminate('Max iterations reached: ' . $this->maxIterations);
             }
@@ -136,6 +147,12 @@ abstract class SupervisorDaemon
         $this->teardown();
     }
 
+    /**
+     * Run only once and quit immediatly
+     * Mainly for test purposes
+     *
+     * @param array $options
+     */
     public function runOnce($options = [])
     {
         $this->options = array_merge($this->options, $options);
@@ -150,6 +167,11 @@ abstract class SupervisorDaemon
         $this->teardown();
     }
 
+    /**
+     * Records activity in the db
+     *
+     * @throws \Doctrine\ORM\OptimisticLockException
+     */
     public function checkin()
     {
         /** @var EntityManager $manager */
@@ -170,12 +192,47 @@ abstract class SupervisorDaemon
     }
 
     /**
+     * Attaches all signal handlers defined by $sigHandlers and tests for availability
+     */
+    protected function attachHandlers()
+    {
+        foreach (self::$sigHandlers as $signal => $handler) {
+            if (is_string($signal) || !$signal) {
+                if (defined($signal) && ($const = constant($signal))) {
+                    self::$sigHandlers[$const] = $handler;
+                }
+                unset(self::$sigHandlers[$signal]);
+            }
+        }
+        foreach (self::$sigHandlers as $signal => $handler) {
+            if (!pcntl_signal($signal, $handler)) {
+                $this->logger->info('Could not bind signal: ' . $signal);
+            }
+        }
+    }
+
+    /**
+     * Set up logger with rotating file, will rotate daily and saves up to $maxFiles files
+     *
+     * @return Logger
+     */
+    protected function initializeLogger($maxFiles = 10)
+    {
+        $logger = new Logger(static::getName() . '_logger');
+        $logger->pushHandler(new RotatingFileHandler($this->getLogFilename(), $maxFiles, Logger::INFO, true, 0777));
+        $logger->info('Setting up: ' . get_called_class(), ['pid' => $this->pid]);
+        return $logger;
+    }
+
+    /**
+     * Gets an entity manager, will also reconnect if connection was lost somehow
+     *
      * @return EntityManager
      */
     protected function getManager()
     {
         /** @var EntityManager $manager */
-        $manager = $this->getContainer()->get('doctrine.orm.entity_manager');
+        $manager = $this->container->get('doctrine.orm.entity_manager');
         if ($manager->getConnection()->ping() === false) {
             $manager->getConnection()->close();
             $manager->getConnection()->connect();
@@ -184,14 +241,7 @@ abstract class SupervisorDaemon
     }
 
     /**
-     * @return ContainerInterface
-     */
-    public function getContainer(): ContainerInterface
-    {
-        return $this->container;
-    }
-
-    /**
+     * Sets the service container
      * @param ContainerInterface $container
      * @return SupervisorDaemon
      */
@@ -201,20 +251,52 @@ abstract class SupervisorDaemon
         return $this;
     }
 
+    /**
+     * TODO: reload config and restart main loop when SIGUSR1 or 2 is received
+     */
     protected function reloadConfig()
     {
     }
 
+    /**
+     * Will be called before main loop starts
+     */
     protected function setup()
     {
     }
 
+    /**
+     * Must be implemented by extenders.
+     * Will be called every $timeout microseconds.
+     *
+     * @return mixed
+     */
     abstract protected function iterate();
 
     /**
-     * CAREFULL!!! teardown() might not get called on __destroy() :( (kill -9)
-     * Please don't do anything important here.
+     * @return string service id for this daemon
+     */
+    public static function getName() {
+        return static::$name;
+    }
+
+    public static function setName($name) {
+        static::$name = $name;
+    }
+
+    public static function setDaemonId($id) {
+        self::$daemons[] = $id;
+    }
+
+    public static function getDaemonIds() {
+        return self::$daemons;
+    }
+
+    /**
+     * Runs when maxIterations is reached or when stop signal is receaved.
      *
+     * CAREFULL!!! teardown() might not get called on __destroy() :( (kill -9).
+     * Please don't do anything important here..
      */
     protected function teardown()
     {
@@ -224,6 +306,12 @@ abstract class SupervisorDaemon
         }
     }
 
+    /**
+     * Terminates main loop and logs a message if present
+     *
+     * @param $message
+     * @param string $state either 'info', 'debug' or 'error'
+     */
     public function terminate($message, $state = 'info')
     {
         if (!empty($message)) {
@@ -242,10 +330,15 @@ abstract class SupervisorDaemon
         $this->terminated = true;
     }
 
+    /**
+     * Gets the symfony log directory appended with hostname for use on shared network drives used by load balanced servers
+     *
+     * @return string
+     */
     protected function getLogDir()
     {
         $logFileDir =
-            $this->getContainer()->get('kernel')->getLogDir() .
+            $this->container->get('kernel')->getLogDir() .
             DIRECTORY_SEPARATOR . 'daemons' . DIRECTORY_SEPARATOR .
             Utils::cleanUpString(gethostname()) . DIRECTORY_SEPARATOR;
         if (!is_dir($logFileDir)) {
@@ -254,35 +347,34 @@ abstract class SupervisorDaemon
         return $logFileDir;
     }
 
+    /**
+     * Gets the full log filename
+     * @return string
+     */
     protected function getLogFilename()
     {
         $logFilename = $this->getLogDir() . $this->getName() . '.log';
         return $logFilename;
     }
 
-    public function __destruct()
-    {
-        $this->teardown();
-    }
+    //======================================= (static) management functions =================================
 
-    // management functions
-
-    public static final function getName()
-    {
-        if (get_called_class() == get_class()) {
-            // dont treat abstract SupervisorDaemon as a valid daemon
-            return null;
-        }
-        $classname = get_called_class();
-        $slashPos = strrpos($classname, '\\');
-        return Utils::decamelize(substr($classname, $slashPos + 1));
-    }
-
+    /**
+     * Gets the full name of the supervisor configuration file
+     *
+     * @return string
+     */
     public static function getConfName()
     {
         return '/etc/supervisor/conf.d/' . static::getName() . static::$extension;
     }
 
+    /**
+     * Parses output of a supervisor shell command and returns the status as reported by supervisor
+     *
+     * @param ShellHelper $shell
+     * @return string
+     */
     private static function parseStatus(ShellHelper $shell)
     {
         $status = static::STATUS_UNKOWN;
@@ -300,6 +392,11 @@ abstract class SupervisorDaemon
         return $status;
     }
 
+    /**
+     * Returns the status as reported by supervisor
+     *
+     * @return string
+     */
     public static function getStatus()
     {
         $shell = new ShellHelper();
@@ -308,9 +405,16 @@ abstract class SupervisorDaemon
         return $status;
     }
 
+    /**
+     * Build a supervisor config file from a template
+     *
+     * @param $baseDir
+     * @param $supervisorLogDir
+     * @return bool|mixed|string
+     */
     protected static function buildConf($baseDir, $supervisorLogDir)
     {
-        $conf = file_get_contents(__DIR__ . '/confs/' . 'template' . static::$extension);
+        $conf = file_get_contents(__DIR__ . '/confs/template' . static::$extension);
         $conf = str_replace('{binDir}', $baseDir . '/bin', $conf);
         $conf = str_replace('{daemonName}', static::getName(), $conf);
         $logFile = $supervisorLogDir . static::getName() . '.log';
@@ -318,8 +422,18 @@ abstract class SupervisorDaemon
         return $conf;
     }
 
-    public static function install(ContainerInterface $container, $uninstallFirst = false)
+    /**
+     * Builds our configuration file and copies it to /etc/supervisor/conf.d and
+     * adds us to the daemons table
+     *
+     * @param ContainerInterface $container
+     * @param bool $uninstallFirst
+     * @return bool
+     * @throws \Doctrine\ORM\OptimisticLockException
+     */
+    public static function install(ContainerInterface $container, $name, $uninstallFirst = false)
     {
+        static::setName($name);
         $baseDir = $container->get('kernel')->getRootDir() . '/..';
         $supervisorLogDir = $container->get('kernel')->getLogDir() .
             DIRECTORY_SEPARATOR . 'daemons' . DIRECTORY_SEPARATOR .
@@ -358,8 +472,16 @@ abstract class SupervisorDaemon
         return static::isInstalled();
     }
 
-    public static function uninstall(ContainerInterface $container)
+    /**
+     * Removes us from the daemons table and deletes the configuration file
+     *
+     * @param ContainerInterface $container
+     * @return bool
+     * @throws \Doctrine\ORM\OptimisticLockException
+     */
+    public static function uninstall(ContainerInterface $container, $name)
     {
+        static::setName($name);
         static::stop();
         $conf = static::getConfName();
         if (!unlink($conf)) {
@@ -381,6 +503,12 @@ abstract class SupervisorDaemon
         return true;
     }
 
+    /**
+     * Retrieves our process id from the daemons table
+     *
+     * @param ContainerInterface $container
+     * @return int
+     */
     public static function getPid(ContainerInterface $container)
     {
         $pid = 0;
@@ -397,32 +525,57 @@ abstract class SupervisorDaemon
         return $pid;
     }
 
+    /**
+     * Tests if we are up and running
+     * @return bool
+     */
     public static function isRunning()
     {
         return static::getStatus() == static::STATUS_RUNNING;
     }
 
+    /**
+     * Tests if we are stopped
+     * @return bool
+     */
     public static function isStopped()
     {
         return static::getStatus() == static::STATUS_STOPPED;
     }
 
+    /**
+     * Tests if our configuration file exists
+     * @return bool
+     */
     public static function isInstalled()
     {
         return file_exists(static::getConfName());
     }
 
+    /**
+     * Tests if supervisor stopped us because of failure
+     *
+     * @return bool
+     */
     public static function isFailed()
     {
         return static::getStatus() == static::STATUS_FATAL;
     }
 
+    /**
+     * Tells supervisor to reload our configs
+     */
     public static function reload()
     {
         $shell = new ShellHelper();
         $shell->run('supervisorctl update');
     }
 
+    /**
+     * Tells supervisor we are ready to rock
+     *
+     * @return bool
+     */
     public static function start()
     {
         $shell = new ShellHelper();
@@ -430,6 +583,11 @@ abstract class SupervisorDaemon
         return static::isRunning();
     }
 
+    /**
+     * Tells supervisor to stop us as soon as possible
+     *
+     * @return bool
+     */
     public static function stop()
     {
         $shell = new ShellHelper();
@@ -437,9 +595,32 @@ abstract class SupervisorDaemon
         return static::isStopped();
     }
 
-    private static function error($error)
+    /**
+     * Collects errors when in managment stage
+     * @param string $error
+     */
+    protected static function error($error)
     {
-        // TODO: get logger from container
+        static::$errors[] = $error;
+    }
+
+    /**
+     * Clears all errors
+     */
+    public static function clearErrors()
+    {
+        static::$errors = [];
+    }
+
+    /**
+     * Retrieves all errors and whipes the slate
+     * @return array
+     */
+    public static function getErrors()
+    {
+        $errors = static::$errors;
+        static::$errors = [];
+        return $errors;
     }
 
 }
