@@ -14,11 +14,11 @@ abstract class SupervisorDaemon
 {
 
     const ONE_MINUTE = 60000000;
-    const FIVE_MINUTES = SupervisorDaemon::ONE_MINUTE * 5;
-    const TEN_MINUTES = SupervisorDaemon::ONE_MINUTE * 10;
-    const TWELVE_MINUTES = SupervisorDaemon::ONE_MINUTE * 12;
-    const ONE_HOUR = SupervisorDaemon::ONE_MINUTE * 60 * 60;
-    const ONE_DAY = SupervisorDaemon::ONE_HOUR * 24;
+    const FIVE_MINUTES = self::ONE_MINUTE * 5;
+    const TEN_MINUTES = self::ONE_MINUTE * 10;
+    const TWELVE_MINUTES = self::ONE_MINUTE * 12;
+    const ONE_HOUR = self::ONE_MINUTE * 60 * 60;
+    const ONE_DAY = self::ONE_HOUR * 24;
 
     const STATUS_UNKOWN = 'UNKNOWN';
     const STATUS_RUNNING = 'RUNNING';
@@ -34,18 +34,19 @@ abstract class SupervisorDaemon
 
     protected $terminated = false;
     protected $torndown = false;
-    protected $timeout = SupervisorDaemon::FIVE_MINUTES;
+    protected $timeout = self::FIVE_MINUTES;
     protected $options = [];
     protected $maxIterations = 100;
     private $currentIteration = 0;
     protected $paused = false;
     protected $pid;
-    private static $daemons = [];
-    protected static $name;
+    private $daemons = [];
+    protected $name;
     protected static $extension = '.conf';
-    protected static $errors = [];
+    protected $errors = [];
+    protected $logLevel;
 
-    static protected $sigHandlers = [
+    protected static $sigHandlers = [
         SIGHUP => array(__CLASS__, 'defaultSigHandler'),
         SIGINT => array(__CLASS__, 'defaultSigHandler'),
         SIGUSR1 => array(__CLASS__, 'defaultSigHandler'),
@@ -73,7 +74,7 @@ abstract class SupervisorDaemon
     {
         $this->setContainer($container);
         $this->pid = getmypid();
-        $this->logger = $this->initializeLogger();
+        $this->logLevel = $logLevel;
         $this->attachHandlers();
     }
 
@@ -126,7 +127,7 @@ abstract class SupervisorDaemon
         $this->setup();
         while (!$this->terminated) {
             if ($this->paused) {
-                $this->logger->addInfo(static::getName() . ' is pauzed, skipping iterate');
+                $this->logger->addInfo($this->getName() . ' is pauzed, skipping iterate');
             } else {
                 $this->checkin();
                 try {
@@ -178,7 +179,7 @@ abstract class SupervisorDaemon
         $manager = $this->getManager();
         /** @var Daemon $daemon */
         $daemon = $manager->getRepository('BozoslivehereSupervisorDaemonBundle:Daemon')->findOneBy([
-            'name' => static::getName(),
+            'name' => $this->getName(),
             'host' => gethostname()
         ]);
         if (empty($daemon)) {
@@ -216,10 +217,10 @@ abstract class SupervisorDaemon
      *
      * @return Logger
      */
-    protected function initializeLogger($maxFiles = 10)
+    protected function initializeLogger($logLevel)
     {
-        $logger = new Logger(static::getName() . '_logger');
-        $logger->pushHandler(new RotatingFileHandler($this->getLogFilename(), $maxFiles, Logger::INFO, true, 0777));
+        $logger = new Logger($this->getName() . '_logger');
+        $logger->pushHandler(new RotatingFileHandler($this->getLogFilename(), 10, $logLevel, true, 0777));
         $logger->info('Setting up: ' . get_called_class(), ['pid' => $this->pid]);
         return $logger;
     }
@@ -276,20 +277,15 @@ abstract class SupervisorDaemon
     /**
      * @return string service id for this daemon
      */
-    public static function getName() {
-        return static::$name;
+    public function getName()
+    {
+        return $this->name;
     }
 
-    public static function setName($name) {
-        static::$name = $name;
-    }
-
-    public static function setDaemonId($id) {
-        self::$daemons[] = $id;
-    }
-
-    public static function getDaemonIds() {
-        return self::$daemons;
+    public function setName($name)
+    {
+        $this->name = $name;
+        $this->logger = $this->initializeLogger($this->logLevel);
     }
 
     /**
@@ -357,16 +353,16 @@ abstract class SupervisorDaemon
         return $logFilename;
     }
 
-    //======================================= (static) management functions =================================
+    //======================================= management functions =================================
 
     /**
      * Gets the full name of the supervisor configuration file
      *
      * @return string
      */
-    public static function getConfName()
+    public function getConfName()
     {
-        return '/etc/supervisor/conf.d/' . static::getName() . static::$extension;
+        return '/etc/supervisor/conf.d/' . $this->getName() . static::$extension;
     }
 
     /**
@@ -375,7 +371,7 @@ abstract class SupervisorDaemon
      * @param ShellHelper $shell
      * @return string
      */
-    private static function parseStatus(ShellHelper $shell)
+    private function parseStatus(ShellHelper $shell)
     {
         $status = static::STATUS_UNKOWN;
         $output = $shell->getOutput();
@@ -397,11 +393,11 @@ abstract class SupervisorDaemon
      *
      * @return string
      */
-    public static function getStatus()
+    public function getStatus()
     {
         $shell = new ShellHelper();
-        $shell->run('supervisorctl status ' . static::getName());
-        $status = static::parseStatus($shell);
+        $shell->run('supervisorctl status ' . $this->getName());
+        $status = $this->parseStatus($shell);
         return $status;
     }
 
@@ -412,12 +408,12 @@ abstract class SupervisorDaemon
      * @param $supervisorLogDir
      * @return bool|mixed|string
      */
-    protected static function buildConf($baseDir, $supervisorLogDir)
+    protected function buildConf($baseDir, $supervisorLogDir)
     {
         $conf = file_get_contents(__DIR__ . '/confs/template' . static::$extension);
         $conf = str_replace('{binDir}', $baseDir . '/bin', $conf);
-        $conf = str_replace('{daemonName}', static::getName(), $conf);
-        $logFile = $supervisorLogDir . static::getName() . '.log';
+        $conf = str_replace('{daemonName}', $this->getName(), $conf);
+        $logFile = $supervisorLogDir . $this->getName() . '.log';
         $conf = str_replace('{logFile}', $logFile, $conf);
         return $conf;
     }
@@ -431,9 +427,8 @@ abstract class SupervisorDaemon
      * @return bool
      * @throws \Doctrine\ORM\OptimisticLockException
      */
-    public static function install(ContainerInterface $container, $name, $uninstallFirst = false)
+    public function install(ContainerInterface $container, $name, $uninstallFirst = false)
     {
-        static::setName($name);
         $baseDir = $container->get('kernel')->getRootDir() . '/..';
         $supervisorLogDir = $container->get('kernel')->getLogDir() .
             DIRECTORY_SEPARATOR . 'daemons' . DIRECTORY_SEPARATOR .
@@ -442,34 +437,34 @@ abstract class SupervisorDaemon
         if (!is_dir($supervisorLogDir)) {
             mkdir($supervisorLogDir, 0777, true);
         }
-        $conf = static::buildConf($baseDir, $supervisorLogDir);
-        $destination = static::getConfName();
-        if ($uninstallFirst && static::isInstalled()) {
-            static::uninstall($container);
+        $conf = $this->buildConf($baseDir, $supervisorLogDir);
+        $destination = $this->getConfName();
+        if ($uninstallFirst && $this->isInstalled()) {
+            $this->uninstall($container);
         }
         if (file_put_contents($destination, $conf) === false) {
-            static::error('Conf could not be copied to ' . $destination);
+            $this->error('Conf could not be copied to ' . $destination);
             return false;
         }
-        static::reload();
+        $this->reload();
         /** @var EntityManager $manager */
         $manager = $container->get('doctrine.orm.entity_manager');
         /** @var Daemon $daemon */
         $daemon = $manager->getRepository('BozoslivehereSupervisorDaemonBundle:Daemon')->findOneBy([
-            'name' => static::getName(),
+            'name' => $this->getName(),
             'host' => gethostname()
         ]);
         if (empty($daemon)) {
             $now = new \DateTime('now', new \DateTimeZone("UTC"));
             $daemon = new Daemon();
             $daemon
-                ->setName(static::getName())
+                ->setName($this->getName())
                 ->setHost(gethostname())
                 ->setLastCheckin($now);
             $manager->persist($daemon);
             $manager->flush();
         }
-        return static::isInstalled();
+        return $this->isInstalled();
     }
 
     /**
@@ -479,21 +474,20 @@ abstract class SupervisorDaemon
      * @return bool
      * @throws \Doctrine\ORM\OptimisticLockException
      */
-    public static function uninstall(ContainerInterface $container, $name)
+    public function uninstall(ContainerInterface $container, $name)
     {
-        static::setName($name);
-        static::stop();
-        $conf = static::getConfName();
+        $this->stop();
+        $conf = $this->getConfName();
         if (!unlink($conf)) {
-            static::error($conf . ' could not be deleted');
+            $this->error($conf . ' could not be deleted');
             return false;
         }
-        static::reload();
+        $this->reload();
         /** @var EntityManager $manager */
         $manager = $container->get('doctrine.orm.entity_manager');
         /** @var Daemon $daemon */
         $daemon = $manager->getRepository('BozoslivehereSupervisorDaemonBundle:Daemon')->findOneBy([
-            'name' => static::getName(),
+            'name' => $this->getName(),
             'host' => gethostname()
         ]);
         if (!empty($daemon)) {
@@ -509,14 +503,14 @@ abstract class SupervisorDaemon
      * @param ContainerInterface $container
      * @return int
      */
-    public static function getPid(ContainerInterface $container)
+    public function getPid(ContainerInterface $container)
     {
         $pid = 0;
         /** @var EntityManager $manager */
         $manager = $container->get('doctrine.orm.entity_manager');
         /** @var Daemon $daemon */
         $daemon = $manager->getRepository('BozoslivehereSupervisorDaemonBundle:Daemon')->findOneBy([
-            'name' => static::getName(),
+            'name' => $this->getName(),
             'host' => gethostname()
         ]);
         if (!empty($daemon)) {
@@ -529,27 +523,27 @@ abstract class SupervisorDaemon
      * Tests if we are up and running
      * @return bool
      */
-    public static function isRunning()
+    public function isRunning()
     {
-        return static::getStatus() == static::STATUS_RUNNING;
+        return $this->getStatus() == static::STATUS_RUNNING;
     }
 
     /**
      * Tests if we are stopped
      * @return bool
      */
-    public static function isStopped()
+    public function isStopped()
     {
-        return static::getStatus() == static::STATUS_STOPPED;
+        return $this->getStatus() == static::STATUS_STOPPED;
     }
 
     /**
      * Tests if our configuration file exists
      * @return bool
      */
-    public static function isInstalled()
+    public function isInstalled()
     {
-        return file_exists(static::getConfName());
+        return file_exists($this->getConfName());
     }
 
     /**
@@ -557,15 +551,15 @@ abstract class SupervisorDaemon
      *
      * @return bool
      */
-    public static function isFailed()
+    public function isFailed()
     {
-        return static::getStatus() == static::STATUS_FATAL;
+        return $this->getStatus() == static::STATUS_FATAL;
     }
 
     /**
      * Tells supervisor to reload our configs
      */
-    public static function reload()
+    public function reload()
     {
         $shell = new ShellHelper();
         $shell->run('supervisorctl update');
@@ -576,11 +570,11 @@ abstract class SupervisorDaemon
      *
      * @return bool
      */
-    public static function start()
+    public function start()
     {
         $shell = new ShellHelper();
-        $shell->run('supervisorctl start ' . static::getName());
-        return static::isRunning();
+        $shell->run('supervisorctl start ' . $this->getName());
+        return $this->isRunning();
     }
 
     /**
@@ -588,38 +582,38 @@ abstract class SupervisorDaemon
      *
      * @return bool
      */
-    public static function stop()
+    public function stop()
     {
         $shell = new ShellHelper();
-        $shell->run('supervisorctl stop ' . static::getName());
-        return static::isStopped();
+        $shell->run('supervisorctl stop ' . $this->getName());
+        return $this->isStopped();
     }
 
     /**
      * Collects errors when in managment stage
      * @param string $error
      */
-    protected static function error($error)
+    protected function error($error)
     {
-        static::$errors[] = $error;
+        $this->errors[] = $error;
     }
 
     /**
      * Clears all errors
      */
-    public static function clearErrors()
+    public function clearErrors()
     {
-        static::$errors = [];
+        $this->errors = [];
     }
 
     /**
      * Retrieves all errors and whipes the slate
      * @return array
      */
-    public static function getErrors()
+    public function getErrors()
     {
-        $errors = static::$errors;
-        static::$errors = [];
+        $errors = $this->errors;
+        $this->errors = [];
         return $errors;
     }
 

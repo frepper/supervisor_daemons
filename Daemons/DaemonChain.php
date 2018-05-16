@@ -18,7 +18,10 @@ class DaemonChain
         $this->daemons[$id] = $daemon;
     }
 
-    public function getDaemons() {
+    public function getDaemons($id = null) {
+        if (!empty($id)) {
+            return $this->daemons[$id];
+        }
         return $this->daemons;
     }
 }

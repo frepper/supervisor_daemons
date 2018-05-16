@@ -6,11 +6,11 @@ use Symfony\Bundle\FrameworkBundle\Command\ContainerAwareCommand;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
-use Symfony\Component\Console\Question\Question;
 use Symfony\Component\Console\Question\ConfirmationQuestion;
-use Bozoslivehere\SupervisorDaemonBundle\Daemons\Supervisor\SupervisorDaemon;
+use Symfony\Component\Console\Question\Question;
 
-class InstallSupervisorDaemonCommand extends ContainerAwareCommand {
+class InstallSupervisorDaemonCommand extends ContainerAwareCommand
+{
 
     private $daemonName = '';
     private $aborted = false;
@@ -18,20 +18,25 @@ class InstallSupervisorDaemonCommand extends ContainerAwareCommand {
     private $start = false;
     private $uninstall = false;
 
-
-    protected function configure() {
+    /**
+     * @inheritdoc
+     */
+    protected function configure()
+    {
         $this
             ->setName('bozos:daemons:install')
             ->setDescription('install or uninstall a daemon')
             ->addArgument(
-                    'name', InputArgument::OPTIONAL, 'name of the daemon to (re-) install'
+                'name', InputArgument::OPTIONAL, 'name of the daemon to (re-) install'
             )
             ->addOption('uninstall')
             ->addOption('start')
-            ->addOption('all')
-        ;
+            ->addOption('all');
     }
 
+    /**
+     * @inheritdoc
+     */
     protected function initialize(InputInterface $input, OutputInterface $output)
     {
         parent::initialize($input, $output);
@@ -44,12 +49,17 @@ class InstallSupervisorDaemonCommand extends ContainerAwareCommand {
         }
     }
 
-    private function getDaemons() {
+    private function getDaemons()
+    {
         $daemonChain = $this->getContainer()->get('bozoslivehere_supervisor_daemon.daemon_chain');
         return $daemonChain->getDaemons();
     }
 
-    protected function interact(InputInterface $input, OutputInterface $output) {
+    /**
+     * @inheritdoc
+     */
+    protected function interact(InputInterface $input, OutputInterface $output)
+    {
         if ($this->aborted) {
             return;
         }
@@ -66,9 +76,8 @@ class InstallSupervisorDaemonCommand extends ContainerAwareCommand {
             $output->writeln('');
             foreach ($daemons as $name => $service) {
                 $names[] = $name;
-                $class = get_class($service);
-                $output->writeln($name . ' (' . $class . ')');
-                $this->daemons[$name] = $class;
+                $output->writeln($name . ' (' . get_class($service) . ')');
+                $this->daemons[$name] = $service;
             }
             $output->writeln('');
             $helper = $this->getHelper('question');
@@ -99,13 +108,14 @@ class InstallSupervisorDaemonCommand extends ContainerAwareCommand {
      * @param OutputInterface $output
      * @param $daemonName
      */
-    protected function handleDaemon(InputInterface $input, OutputInterface $output, $daemonName) {
+    protected function handleDaemon(InputInterface $input, OutputInterface $output, $daemonName)
+    {
         $daemon = $this->daemons[$daemonName];
-        if ($daemon::isInstalled()) {
+        if ($daemon->isInstalled()) {
             $output->writeln("<info>{$daemonName} is currently installed</info>");
-            if ($daemon::isRunning()) {
+            if ($daemon->isRunning()) {
                 $output->writeln("<info>{$daemonName} is currently running</info>");
-                if ($daemon::stop()) {
+                if ($daemon->stop()) {
                     $output->writeln("<info>{$daemonName} was stopped</info>");
                 } else {
                     $output->writeln("<error>{$daemonName} could not be stopped</error>");
@@ -114,7 +124,7 @@ class InstallSupervisorDaemonCommand extends ContainerAwareCommand {
             } else {
                 $output->writeln("<info>{$daemonName} is currently not running</info>");
             }
-            if ($daemon::uninstall($this->getContainer(), $daemonName)) {
+            if ($daemon->uninstall($this->getContainer(), $daemonName)) {
                 $output->writeln("<info>{$daemonName} was uninstalled</info>");
             } else {
                 $output->writeln("<error>{$daemonName} could not be uninstalled</error>");
@@ -124,10 +134,10 @@ class InstallSupervisorDaemonCommand extends ContainerAwareCommand {
             $output->writeln("<info>{$daemonName} is currently not installed</info>");
         }
         if (!$input->getOption('uninstall')) {
-            if ($daemon::install($this->getContainer(), $daemonName)) {
+            if ($daemon->install($this->getContainer(), $daemonName)) {
                 $output->writeln("<info>{$daemonName} was installed</info>");
                 if ($this->start) {
-                    if ($daemon::start()) {
+                    if ($daemon->start()) {
                         $output->writeln("<info>{$daemonName} was started</info>");
                     } else {
                         $output->writeln("<error>{$daemonName} was NOT started</error>");
@@ -139,13 +149,17 @@ class InstallSupervisorDaemonCommand extends ContainerAwareCommand {
         }
     }
 
-    protected function execute(InputInterface $input, OutputInterface $output) {
+    /**
+     * @inheritdoc
+     */
+    protected function execute(InputInterface $input, OutputInterface $output)
+    {
         if ($this->aborted) {
             $output->writeln('<error>Aborting mission!</error>');
             return;
         }
         if ($input->getOption('all')) {
-            foreach($this->daemons as $name => $daemon) {
+            foreach ($this->daemons as $name => $daemon) {
                 $this->handleDaemon($input, $output, $name);
             }
         } else {

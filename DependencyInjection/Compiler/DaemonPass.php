@@ -2,7 +2,6 @@
 
 namespace Bozoslivehere\SupervisorDaemonBundle\DependencyInjection\Compiler;
 
-use Bozoslivehere\SupervisorDaemonBundle\Daemons\DaemonChain;
 use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Reference;
@@ -22,6 +21,8 @@ class DaemonPass implements CompilerPassInterface
         foreach ($taggedServices as $id => $tags) {
             $daemonReference = new Reference($id);
             $definition->addMethodCall('addDaemon', [$id, $daemonReference]);
+            $daemonDefinition = $container->findDefinition($id);
+            $daemonDefinition->addMethodCall('setName', [$id]);
         }
     }
 }
