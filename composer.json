@@ -17,6 +17,16 @@
       "Bozoslivehere\\SupervisorDaemonBundle\\": ""
     }
   },
+  "autoload-dev": {
+    "psr-4": {
+      "Tests\\": "Tests/"
+    }
+  },
+  "autoload-test": {
+    "psr-4": {
+      "Tests\\": "Tests/"
+    }
+  },
   "extra": {
     "branch-alias": {
       "dev-master": "1.0.0"
