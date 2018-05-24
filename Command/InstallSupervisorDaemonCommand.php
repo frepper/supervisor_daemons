@@ -56,7 +56,8 @@ class InstallSupervisorDaemonCommand extends ContainerAwareCommand
         }
     }
 
-    public function abort() {
+    public function abort()
+    {
         $this->aborted = true;
     }
 

@@ -345,7 +345,7 @@ abstract class SupervisorDaemon
         $logFileDir =
             $this->container->get('kernel')->getLogDir() .
             DIRECTORY_SEPARATOR . 'daemons' . DIRECTORY_SEPARATOR .
-            Utils::cleanUpString(gethostname()) . DIRECTORY_SEPARATOR;
+            $this->cleanHostName(gethostname()) . DIRECTORY_SEPARATOR;
         if (!is_dir($logFileDir)) {
             mkdir($logFileDir, 0777, true);
         }
@@ -445,7 +445,7 @@ abstract class SupervisorDaemon
         $baseDir = $container->get('kernel')->getRootDir() . '/..';
         $supervisorLogDir = $container->get('kernel')->getLogDir() .
             DIRECTORY_SEPARATOR . 'daemons' . DIRECTORY_SEPARATOR .
-            Utils::cleanUpString(gethostname()) . DIRECTORY_SEPARATOR .
+            $this->cleanHostName(gethostname()) . DIRECTORY_SEPARATOR .
             'supervisor' . DIRECTORY_SEPARATOR;
         if (!is_dir($supervisorLogDir)) {
             mkdir($supervisorLogDir, 0777, true);
@@ -658,6 +658,18 @@ abstract class SupervisorDaemon
 
     public function setAutostart($autostart) {
         $this->autostart = $autostart;
+    }
+
+    public function cleanHostName($str, $replace = array(), $delimiter = '-')
+    {
+        if (!empty($replace)) {
+            $str = str_replace((array)$replace, '', $str);
+        }
+        $clean = iconv('UTF-8', 'ASCII//TRANSLIT', $str);
+        $clean = preg_replace("/[^a-zA-Z0-9\/_|+ -]/", '', $clean);
+        $clean = strtolower(trim($clean, '-'));
+        $clean = preg_replace("/[\/_|+ -]+/", $delimiter, $clean);
+        return trim($clean);
     }
 
 }
