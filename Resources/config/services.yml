@@ -1,3 +1,10 @@
 services:
     bozoslivehere_supervisor_daemon.daemon_chain:
         class: Bozoslivehere\SupervisorDaemonBundle\Daemons\DaemonChain
+
+    bozoslivehere_supervisor_daemon.doctrine_table_prefix:
+        class: Bozoslivehere\SupervisorDaemonBundle\DoctrineExtensions\TablePrefix
+        arguments:
+            - '%bozoslivehere_supervisor_daemon_table_prefix%'
+        tags:
+            - { name: doctrine.event_subscriber }

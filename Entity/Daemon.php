@@ -6,7 +6,7 @@ use Doctrine\ORM\Mapping as ORM;
 /**
  * Class Daemon
  *
- * @ORM\Table(name="supervisor_daemon")
+ * @ORM\Table(name="daemon")
  * @ORM\Entity
  */
 class Daemon

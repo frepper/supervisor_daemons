@@ -38,6 +38,13 @@ class AppKernel extends Kernel {
     }
 }
 ```
+If you wish to prefix table names you can do so in the config:
+```
+...
+bozoslivehere_supervisor_daemon:
+    table_prefix: 'foo_'
+```
+
 Don't forget to update your schema!
 
 

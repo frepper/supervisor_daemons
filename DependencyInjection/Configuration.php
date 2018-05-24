@@ -17,15 +17,13 @@ class Configuration implements ConfigurationInterface
      */
     public function getConfigTreeBuilder()
     {
-        // Not used anymore. Daemons are identified by service tags now
         $treeBuilder = new TreeBuilder();
         $rootNode = $treeBuilder->root('bozoslivehere_supervisor_daemon');
 
         $rootNode
             ->children()
-                ->arrayNode('daemons')
-                    ->canBeUnset()
-                    ->prototype('scalar')
+                ->scalarNode('table_prefix')
+                    ->defaultValue('')
                 ->end()
             ->end();
         return $treeBuilder;
