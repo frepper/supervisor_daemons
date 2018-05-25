@@ -3,12 +3,12 @@
 namespace Bozoslivehere\SupervisorDaemonBundle\Daemons\Supervisor;
 
 use Bozoslivehere\SupervisorDaemonBundle\Entity\Daemon;
-use Bozoslivehere\SupervisorDaemonBundle\Helpers\ShellHelper;
 use Bozoslivehere\SupervisorDaemonBundle\Utils\Utils;
 use Doctrine\ORM\EntityManager;
 use Monolog\Handler\RotatingFileHandler;
 use Monolog\Logger;
 use Symfony\Component\DependencyInjection\ContainerInterface;
+use Symfony\Component\Process\Process;
 
 abstract class SupervisorDaemon
 {
@@ -377,13 +377,13 @@ abstract class SupervisorDaemon
     /**
      * Parses output of a supervisor shell command and returns the status as reported by supervisor
      *
-     * @param ShellHelper $shell
+     * @param $output
      * @return string
      */
-    private function parseStatus(ShellHelper $shell)
+    private function parseStatus($output)
     {
+        $output = explode("\n", $output);
         $status = static::STATUS_UNKOWN;
-        $output = $shell->getOutput();
         if (!empty($output[0])) {
             $parts = preg_split('/\s+/', $output[0]);
             if (!empty($parts[1])) {
@@ -394,9 +394,6 @@ abstract class SupervisorDaemon
                 }
             }
         }
-//        if ($status == static::STATUS_UNKOWN) {
-//            $this->logger->err('status', $status);
-//        }
         return $status;
     }
 
@@ -407,10 +404,9 @@ abstract class SupervisorDaemon
      */
     public function getStatus()
     {
-        $shell = new ShellHelper();
-        $shell->run('supervisorctl status ' . $this->getName());
-        $status = $this->parseStatus($shell);
-        return $status;
+        $shell = new Process('supervisorctl status ' . $this->getName());
+        $shell->run();
+        return $this->parseStatus($shell->getOutput());
     }
 
     /**
@@ -596,8 +592,8 @@ abstract class SupervisorDaemon
      */
     public function reload()
     {
-        $shell = new ShellHelper();
-        $shell->run('supervisorctl update');
+        $shell = new Process('supervisorctl update');
+        $shell->run();
     }
 
     /**
@@ -607,8 +603,8 @@ abstract class SupervisorDaemon
      */
     public function start()
     {
-        $shell = new ShellHelper();
-        $shell->run('supervisorctl start ' . $this->getName());
+        $shell = new Process('supervisorctl start ' . $this->getName());
+        $shell->run();
         return $this->isRunningOrStarting();
     }
 
@@ -619,8 +615,8 @@ abstract class SupervisorDaemon
      */
     public function stop()
     {
-        $shell = new ShellHelper();
-        $shell->run('supervisorctl stop ' . $this->getName());
+        $shell = new Process('supervisorctl stop ' . $this->getName());
+        $shell->run();
         return $this->isStopped();
     }
 
