@@ -424,6 +424,8 @@ abstract class SupervisorDaemon
         $logFile = $supervisorLogDir . $this->getName() . '.log';
         $conf = str_replace('{logFile}', $logFile, $conf);
         $conf = str_replace('{autostart}', ($this->autostart) ? 'true' : 'false', $conf);
+        $env = $this->container->get('kernel')->getEnvironment();
+        $conf = str_replace('{env}', $env, $conf);
         return $conf;
     }
 
