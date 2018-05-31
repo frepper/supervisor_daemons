@@ -5,6 +5,7 @@ namespace Bozoslivehere\SupervisorDaemonBundle\Daemons\Supervisor;
 use Bozoslivehere\SupervisorDaemonBundle\Entity\Daemon;
 use Bozoslivehere\SupervisorDaemonBundle\Utils\Utils;
 use Doctrine\ORM\EntityManager;
+use Gedmo\Loggable\Loggable;
 use Monolog\Handler\RotatingFileHandler;
 use Monolog\Logger;
 use Symfony\Component\DependencyInjection\ContainerInterface;
@@ -34,6 +35,10 @@ abstract class SupervisorDaemon
         self::STATUS_STARTING
     ];
 
+    const EXIT_STATE_INFO = 'info';
+    const EXIT_STATE_DEBUG = 'debug';
+    const EXIT_STATE_ERROR = 'error';
+
     protected $terminated = false;
     protected $torndown = false;
     protected $timeout = self::FIVE_MINUTES;
@@ -46,7 +51,6 @@ abstract class SupervisorDaemon
     protected $name;
     protected static $extension = '.conf';
     protected $errors = [];
-    protected $logLevel;
 
     protected $shouldCheckin = true;
 
@@ -64,7 +68,7 @@ abstract class SupervisorDaemon
      *
      * @var \Monolog\Logger
      */
-    protected $logger = null;
+    private $logger = null;
 
     /**
      * @var ContainerInterface
@@ -74,13 +78,13 @@ abstract class SupervisorDaemon
     /**
      * SupervisorDaemon constructor.
      * @param ContainerInterface $container
-     * @param int $logLevel
+     * @param Logger $logger
      */
-    public function __construct(ContainerInterface $container, $logLevel = Logger::ERROR)
+    public function __construct(ContainerInterface $container, Logger $logger)
     {
         $this->setContainer($container);
         $this->pid = getmypid();
-        $this->logLevel = $logLevel;
+        $this->logger = $logger;
         $this->attachHandlers();
     }
 
@@ -112,11 +116,11 @@ abstract class SupervisorDaemon
                 $this->terminate('Received signal: SIGINT');
                 break;
             case SIGUSR1: // reload configs
-                $this->logger->info('Received signal: SIGUSR1');
+                $this->logInfo('Received signal: SIGUSR1');
                 $this->reloadConfig();
                 break;
             case SIGUSR2: // restart
-                $this->logger->info('Received signal: SIGUSR2');
+                $this->logInfo('Received signal: SIGUSR2');
                 $this->terminate('Received SIGUSR2, terminating');
                 break;
         }
@@ -130,17 +134,17 @@ abstract class SupervisorDaemon
     public function run($options = [])
     {
         $this->options = array_merge($this->options, $options);
+        $this->beforeSetup();
         $this->setup();
         while (!$this->terminated) {
             if ($this->paused) {
-                $this->logger->addInfo($this->getName() . ' is pauzed, skipping iterate');
+                $this->logDebug('Pauzed, skipping iterate');
             } else {
                 try {
+                    $this->beforeIterate();
                     $this->iterate();
                 } catch (\Exception $error) {
-                    if (!empty($this->logger)) {
-                        $this->logger->addError($error->getMessage(), [$error]);
-                    }
+                    $this->logError($error->getMessage(), [$error]);
                 }
                 $this->checkin();
             }
@@ -163,13 +167,13 @@ abstract class SupervisorDaemon
     public function runOnce($options = [])
     {
         $this->options = array_merge($this->options, $options);
+        $this->beforeSetup();
         $this->setup();
         try {
+            $this->beforeIterate();
             $this->iterate();
         } catch (\Exception $error) {
-            if (!empty($this->logger)) {
-                $this->logger->addError($error->getMessage(), [$error]);
-            }
+            $this->logError($error->getMessage(), [$error]);
         }
         $this->teardown();
     }
@@ -216,22 +220,13 @@ abstract class SupervisorDaemon
         }
         foreach (self::$sigHandlers as $signal => $handler) {
             if (!pcntl_signal($signal, $handler)) {
-                $this->logger->info('Could not bind signal: ' . $signal);
+                $this->logInfo('Could not bind signal: ' . $signal);
             }
         }
     }
 
-    /**
-     * Set up logger with rotating file, will rotate daily and saves up to $maxFiles files
-     *
-     * @return Logger
-     */
-    protected function initializeLogger($logLevel)
-    {
-        $logger = new Logger($this->getName() . '_logger');
-        $logger->pushHandler(new RotatingFileHandler($this->getLogFilename(), 10, $logLevel, true, 0777));
-        $logger->info('Setting up: ' . get_called_class(), ['pid' => $this->pid]);
-        return $logger;
+    public function setLogger(Logger $logger) {
+        $this->logger = $logger;
     }
 
     /**
@@ -255,7 +250,7 @@ abstract class SupervisorDaemon
      * @param ContainerInterface $container
      * @return SupervisorDaemon
      */
-    public function setContainer(ContainerInterface $container): SupervisorDaemon
+    protected function setContainer(ContainerInterface $container): SupervisorDaemon
     {
         $this->container = $container;
         return $this;
@@ -269,10 +264,21 @@ abstract class SupervisorDaemon
     }
 
     /**
+     * Called internaly before setup
+     */
+    private function beforeSetup() {
+        $this->logDebug('Setting up', ['pid' => $this->pid]);
+    }
+
+    /**
      * Will be called before main loop starts
      */
     protected function setup()
     {
+    }
+
+    private function beforeIterate() {
+        $this->logDebug('Iterating');
     }
 
     /**
@@ -294,7 +300,6 @@ abstract class SupervisorDaemon
     public function setName($name)
     {
         $this->name = $name;
-        $this->logger = $this->initializeLogger($this->logLevel);
     }
 
     /**
@@ -306,7 +311,7 @@ abstract class SupervisorDaemon
     protected function teardown()
     {
         if (!$this->torndown) {
-            $this->logger->info('Torn down', ['pid' => $this->pid]);
+            $this->logDebug('Torn down', ['pid' => $this->pid]);
             $this->torndown = true;
         }
     }
@@ -317,49 +322,25 @@ abstract class SupervisorDaemon
      * @param $message
      * @param string $state either 'info', 'debug' or 'error'
      */
-    public function terminate($message, $state = 'info')
+    public function terminate($message = '', $state = self::EXIT_STATE_INFO)
     {
         if (!empty($message)) {
             switch ($state) {
-                case 'info':
-                    $this->logger->info($message, ['pid' => $this->pid]);
+                case self::EXIT_STATE_INFO:
+                    $this->logInfo($message, ['pid' => $this->pid]);
                     break;
-                case 'debug':
-                    $this->logger->debug($message, ['pid' => $this->pid]);
+                case self::EXIT_STATE_DEBUG:
+                    $this->logDebug($message, ['pid' => $this->pid]);
                     break;
-                case 'error':
-                    $this->logger->error($message, ['pid' => $this->pid]);
+                case self::EXIT_STATE_ERROR:
+                    $this->logError($message, ['pid' => $this->pid]);
+                    break;
+                default:
+                    $this->logError("Illegal termination state: $state with message: $message", ['pid' => $this->pid]);
                     break;
             }
         }
         $this->terminated = true;
-    }
-
-    /**
-     * Gets the symfony log directory appended with hostname for use on shared network drives used by load balanced servers
-     *
-     * @return string
-     */
-    protected function getLogDir()
-    {
-        $logFileDir =
-            $this->container->get('kernel')->getLogDir() .
-            DIRECTORY_SEPARATOR . 'daemons' . DIRECTORY_SEPARATOR .
-            $this->cleanHostName(gethostname()) . DIRECTORY_SEPARATOR;
-        if (!is_dir($logFileDir)) {
-            mkdir($logFileDir, 0777, true);
-        }
-        return $logFileDir;
-    }
-
-    /**
-     * Gets the full log filename
-     * @return string
-     */
-    protected function getLogFilename()
-    {
-        $logFilename = $this->getLogDir() . $this->getName() . '.log';
-        return $logFilename;
     }
 
     //======================================= management functions =================================
@@ -387,10 +368,8 @@ abstract class SupervisorDaemon
         if (!empty($output[0])) {
             $parts = preg_split('/\s+/', $output[0]);
             if (!empty($parts[1])) {
-                if ($parts[1]) {
-                    if (in_array($parts[1], static::STATUSES)) {
-                        $status = $parts[1];
-                    }
+                if (in_array($parts[1], static::STATUSES)) {
+                    $status = $parts[1];
                 }
             }
         }
@@ -416,15 +395,18 @@ abstract class SupervisorDaemon
      * @param $supervisorLogDir
      * @return bool|mixed|string
      */
-    protected function buildConf($baseDir, $supervisorLogDir)
+    protected function buildConf()
     {
+        $baseDir = $this->container->get('kernel')->getRootDir() . '/..';
+        $supervisorLogDir = $this->container->getParameter('bozoslivehere_supervisor_daemon_supervisor_log_path');
+        $logFile = $supervisorLogDir . $this->getName() . '.log';
+        $env = $this->container->get('kernel')->getEnvironment();
+
         $conf = file_get_contents(__DIR__ . '/confs/template' . static::$extension);
         $conf = str_replace('{binDir}', $baseDir . '/bin', $conf);
         $conf = str_replace('{daemonName}', $this->getName(), $conf);
-        $logFile = $supervisorLogDir . $this->getName() . '.log';
         $conf = str_replace('{logFile}', $logFile, $conf);
         $conf = str_replace('{autostart}', ($this->autostart) ? 'true' : 'false', $conf);
-        $env = $this->container->get('kernel')->getEnvironment();
         $conf = str_replace('{env}', $env, $conf);
         return $conf;
     }
@@ -433,34 +415,25 @@ abstract class SupervisorDaemon
      * Builds our configuration file and copies it to /etc/supervisor/conf.d and
      * adds us to the daemons table
      *
-     * @param ContainerInterface $container
      * @param bool $uninstallFirst
      * @return bool
      * @throws \Doctrine\ORM\OptimisticLockException
      */
-    public function install(ContainerInterface $container, $uninstallFirst = false)
+    public function install($uninstallFirst = false)
     {
-        $baseDir = $container->get('kernel')->getRootDir() . '/..';
-        $supervisorLogDir = $container->get('kernel')->getLogDir() .
-            DIRECTORY_SEPARATOR . 'daemons' . DIRECTORY_SEPARATOR .
-            $this->cleanHostName(gethostname()) . DIRECTORY_SEPARATOR .
-            'supervisor' . DIRECTORY_SEPARATOR;
-        if (!is_dir($supervisorLogDir)) {
-            mkdir($supervisorLogDir, 0777, true);
-        }
-        $conf = $this->buildConf($baseDir, $supervisorLogDir);
+        $conf = $this->buildConf();
         $destination = $this->getConfName();
         if ($uninstallFirst && $this->isInstalled()) {
-            $this->uninstall($container);
+            $this->uninstall();
         }
         if (file_put_contents($destination, $conf) === false) {
-            $this->error('Conf could not be copied to ' . $destination);
+            $this->logError('Conf could not be copied to ' . $destination);
             return false;
         }
         $this->reload();
         if ($this->shouldCheckin) {
             /** @var EntityManager $manager */
-            $manager = $container->get('doctrine.orm.entity_manager');
+            $manager = $this->container->get('doctrine.orm.entity_manager');
             /** @var Daemon $daemon */
             $daemon = $manager->getRepository('BozoslivehereSupervisorDaemonBundle:Daemon')->findOneBy([
                 'name' => $this->getName(),
@@ -484,29 +457,30 @@ abstract class SupervisorDaemon
     /**
      * Removes us from the daemons table and deletes the configuration file
      *
-     * @param ContainerInterface $container
      * @return bool
      * @throws \Doctrine\ORM\OptimisticLockException
      */
-    public function uninstall(ContainerInterface $container)
+    public function uninstall()
     {
         $this->stop();
         $conf = $this->getConfName();
         if (!unlink($conf)) {
-            $this->error($conf . ' could not be deleted');
+            $this->logError($conf . ' could not be deleted');
             return false;
         }
         $this->reload();
-        /** @var EntityManager $manager */
-        $manager = $container->get('doctrine.orm.entity_manager');
-        /** @var Daemon $daemon */
-        $daemon = $manager->getRepository('BozoslivehereSupervisorDaemonBundle:Daemon')->findOneBy([
-            'name' => $this->getName(),
-            'host' => gethostname()
-        ]);
-        if (!empty($daemon)) {
-            $manager->remove($daemon);
-            $manager->flush();
+        if ($this->shouldCheckin) {
+            /** @var EntityManager $manager */
+            $manager = $this->container->get('doctrine.orm.entity_manager');
+            /** @var Daemon $daemon */
+            $daemon = $manager->getRepository('BozoslivehereSupervisorDaemonBundle:Daemon')->findOneBy([
+                'name' => $this->getName(),
+                'host' => gethostname()
+            ]);
+            if (!empty($daemon)) {
+                $manager->remove($daemon);
+                $manager->flush();
+            }
         }
         return true;
     }
@@ -514,14 +488,13 @@ abstract class SupervisorDaemon
     /**
      * Retrieves our process id from the daemons table
      *
-     * @param ContainerInterface $container
      * @return int
      */
-    public function getPid(ContainerInterface $container)
+    public function getPid()
     {
         $pid = 0;
         /** @var EntityManager $manager */
-        $manager = $container->get('doctrine.orm.entity_manager');
+        $manager = $this->container->get('doctrine.orm.entity_manager');
         /** @var Daemon $daemon */
         $daemon = $manager->getRepository('BozoslivehereSupervisorDaemonBundle:Daemon')->findOneBy([
             'name' => $this->getName(),
@@ -668,6 +641,25 @@ abstract class SupervisorDaemon
         $clean = strtolower(trim($clean, '-'));
         $clean = preg_replace("/[\/_|+ -]+/", $delimiter, $clean);
         return trim($clean);
+    }
+
+    protected function logInfo($message, $context = []) {
+        if (!empty($this->logger)) {
+            $this->logger->addInfo($this->getName() . ': '. $message, $context);
+        }
+    }
+
+    protected function logDebug($message, $context = []) {
+        if (!empty($this->logger)) {
+            $this->logger->addDebug($this->getName() . ': '. $message, $context);
+        }
+    }
+
+    protected function logError($message, $context = []) {
+        if (!empty($this->logger)) {
+            $this->logger->addError($this->getName() . ': '. $message, $context);
+        }
+        $this->error($message);
     }
 
 }

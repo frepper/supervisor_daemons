@@ -131,7 +131,7 @@ class InstallSupervisorDaemonCommand extends ContainerAwareCommand
             } else {
                 $output->writeln("<info>$daemonName is currently not running</info>");
             }
-            if ($daemon->uninstall($this->getContainer())) {
+            if ($daemon->uninstall()) {
                 $output->writeln("<info>$daemonName was uninstalled</info>");
             } else {
                 $output->writeln("<error>$daemonName could not be uninstalled</error>");
@@ -141,7 +141,7 @@ class InstallSupervisorDaemonCommand extends ContainerAwareCommand
             $output->writeln("<info>$daemonName is currently not installed</info>");
         }
         if (!$input->getOption('uninstall')) {
-            if ($daemon->install($this->getContainer())) {
+            if ($daemon->install()) {
                 $output->writeln("<info>$daemonName was installed</info>");
                 if ($this->start) {
                     if ($daemon->start()) {

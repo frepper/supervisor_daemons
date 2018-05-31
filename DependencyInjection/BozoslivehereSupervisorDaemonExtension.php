@@ -22,6 +22,13 @@ class BozoslivehereSupervisorDaemonExtension extends Extension
         $configuration = new Configuration();
         $config = $this->processConfiguration($configuration, $configs);
         foreach ($config as $key => $val) {
+            if ($key == 'supervisor_log_path' || $key == 'log_path') {
+                $path = rtrim($config[$key],DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+                if (!is_dir($path)) {
+                    mkdir($path, 0777, true);
+                }
+                $config[$key] = $path;
+            }
             $container->setParameter($this->getAlias() . '_' . $key, $config[$key]);
         }
         $loader = new Loader\YamlFileLoader($container, new FileLocator(__DIR__.'/../Resources/config'));

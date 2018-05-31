@@ -8,3 +8,8 @@ services:
             - '%bozoslivehere_supervisor_daemon_table_prefix%'
         tags:
             - { name: doctrine.event_subscriber }
+
+    bozoslivehere_supervisor_daemon.supervisor_daemon:
+        abstract:  true
+        arguments: ['@service_container', '@monolog.logger']
+        shared: false
