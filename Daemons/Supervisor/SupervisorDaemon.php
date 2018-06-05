@@ -430,6 +430,12 @@ abstract class SupervisorDaemon
             $this->logError('Conf could not be copied to ' . $destination);
             return false;
         }
+        $path = $this->container->getParameter('bozoslivehere_supervisor_daemon_supervisor_log_path');
+        if (!is_dir($path)) {
+            if (!mkdir($path, 0777, true)) {
+                throw new \Exception('Could not create log dir: ' . $path);
+            }
+        }
         $this->reload();
         if ($this->shouldCheckin) {
             /** @var EntityManager $manager */
@@ -645,18 +651,21 @@ abstract class SupervisorDaemon
 
     protected function logInfo($message, $context = []) {
         if (!empty($this->logger)) {
+            $context['pid'] = $this->getPid();
             $this->logger->addInfo($this->getName() . ': '. $message, $context);
         }
     }
 
     protected function logDebug($message, $context = []) {
         if (!empty($this->logger)) {
+            $context['pid'] = $this->getPid();
             $this->logger->addDebug($this->getName() . ': '. $message, $context);
         }
     }
 
     protected function logError($message, $context = []) {
         if (!empty($this->logger)) {
+            $context['pid'] = $this->getPid();
             $this->logger->addError($this->getName() . ': '. $message, $context);
         }
         $this->error($message);

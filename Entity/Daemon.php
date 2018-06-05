@@ -59,7 +59,7 @@ class Daemon
     /**
      * @return int
      */
-    public function getPid(): int
+    public function getPid()
     {
         return $this->pid;
     }

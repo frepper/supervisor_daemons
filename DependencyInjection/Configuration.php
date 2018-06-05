@@ -25,11 +25,8 @@ class Configuration implements ConfigurationInterface
                 ->scalarNode('table_prefix')
                     ->defaultValue('')
                 ->end()
-                ->scalarNode('log_path')
-                    ->defaultValue('%kernel.logs_dir%/daemons/')
-                ->end()
                 ->scalarNode('supervisor_log_path')
-                    ->defaultValue('%kernel.logs_dir%/daemons/supervisor/')
+                    ->cannotBeEmpty()
                 ->end()
             ->end();
         return $treeBuilder;
