@@ -56,6 +56,8 @@ abstract class SupervisorDaemon
 
     protected $autostart = true;
 
+    protected $manager;
+
     protected static $sigHandlers = [
         SIGHUP => array(__CLASS__, 'defaultSigHandler'),
         SIGINT => array(__CLASS__, 'defaultSigHandler'),
@@ -86,6 +88,7 @@ abstract class SupervisorDaemon
         $this->pid = getmypid();
         $this->logger = $logger;
         $this->attachHandlers();
+        $this->getManager();
     }
 
     /**
@@ -140,6 +143,7 @@ abstract class SupervisorDaemon
             if ($this->paused) {
                 $this->logDebug('Pauzed, skipping iterate');
             } else {
+                $this->connect();
                 try {
                     $this->beforeIterate();
                     $this->iterate();
@@ -147,6 +151,7 @@ abstract class SupervisorDaemon
                     $this->logError($error->getMessage(), [$error]);
                 }
                 $this->checkin();
+                $this->disconnect();
             }
             usleep($this->timeout);
             $this->currentIteration++;
@@ -229,6 +234,19 @@ abstract class SupervisorDaemon
         $this->logger = $logger;
     }
 
+    private function disconnect()
+    {
+        $this->manager->getConnection()->close();
+    }
+
+    private function connect()
+    {
+        if ($this->manager->getConnection()->isConnected()) {
+            $this->manager->getConnection()->close();
+        }
+        $this->manager->getConnection()->connect();
+    }
+
     /**
      * Gets an entity manager, will also reconnect if connection was lost somehow
      *
@@ -237,12 +255,13 @@ abstract class SupervisorDaemon
     protected function getManager()
     {
         /** @var EntityManager $manager */
-        $manager = $this->container->get('doctrine.orm.entity_manager');
-        if ($manager->getConnection()->ping() === false) {
-            $manager->getConnection()->close();
-            $manager->getConnection()->connect();
+        if (empty($this->manager)) {
+            $this->manager = $this->container->get('doctrine.orm.entity_manager');
         }
-        return $manager;
+        if (!$this->manager->getConnection()->isConnected() || $this->manager->getConnection()->ping() === false) {
+            $this->connect();
+        }
+        return $this->manager;
     }
 
     /**
