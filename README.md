@@ -16,7 +16,7 @@ Add the repo to composer.json (a packagist package will come in the near future)
     "repositories": [
         {
             "type": "vcs",
-            "url": "git@github.com:alfons56/supervisor_daemon.git"
+            "url": "https://github.com/frepper/supervisor_daemon.git"
         }
     ],
 ...
