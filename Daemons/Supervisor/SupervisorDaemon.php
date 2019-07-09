@@ -44,19 +44,18 @@ abstract class SupervisorDaemon
     protected $timeout = self::FIVE_MINUTES;
     protected $options = [];
     protected $maxIterations = 100;
-    private $currentIteration = 0;
     protected $paused = false;
     protected $pid;
-    private $daemons = [];
     protected $name;
     protected static $extension = '.conf';
     protected $errors = [];
 
+    private $currentIteration = 0;
+    private $daemons = [];
+
     protected $shouldCheckin = true;
 
     protected $autostart = true;
-
-    protected $manager;
 
     protected static $sigHandlers = [
         SIGHUP => array(__CLASS__, 'defaultSigHandler'),
@@ -70,7 +69,7 @@ abstract class SupervisorDaemon
      *
      * @var \Monolog\Logger
      */
-    private $logger = null;
+    protected $logger = null;
 
     /**
      * @var ContainerInterface
@@ -84,11 +83,10 @@ abstract class SupervisorDaemon
      */
     public function __construct(ContainerInterface $container, Logger $logger)
     {
-        $this->setContainer($container);
+        $this->container = $container;
         $this->pid = getmypid();
         $this->logger = $logger;
         $this->attachHandlers();
-        $this->getManager();
     }
 
     /**
@@ -119,11 +117,11 @@ abstract class SupervisorDaemon
                 $this->terminate('Received signal: SIGINT');
                 break;
             case SIGUSR1: // reload configs
-                $this->logInfo('Received signal: SIGUSR1');
+                $this->logger->info('Received signal: SIGUSR1');
                 $this->reloadConfig();
                 break;
             case SIGUSR2: // restart
-                $this->logInfo('Received signal: SIGUSR2');
+                $this->logger->info('Received signal: SIGUSR2');
                 $this->terminate('Received SIGUSR2, terminating');
                 break;
         }
@@ -137,21 +135,17 @@ abstract class SupervisorDaemon
     public function run($options = [])
     {
         $this->options = array_merge($this->options, $options);
-        $this->beforeSetup();
         $this->setup();
         while (!$this->terminated) {
             if ($this->paused) {
-                $this->logDebug('Pauzed, skipping iterate');
             } else {
-                $this->connect();
                 try {
                     $this->beforeIterate();
                     $this->iterate();
+                    $this->afterIterate();
                 } catch (\Exception $error) {
-                    $this->logError($error->getMessage(), [$error]);
+                    $this->logger->error($error->getMessage(), [$error]);
                 }
-                $this->checkin();
-                $this->disconnect();
             }
             usleep($this->timeout);
             $this->currentIteration++;
@@ -165,49 +159,21 @@ abstract class SupervisorDaemon
 
     /**
      * Run only once and quit immediatly
-     * Mainly for test purposes
      *
      * @param array $options
      */
     public function runOnce($options = [])
     {
         $this->options = array_merge($this->options, $options);
-        $this->beforeSetup();
         $this->setup();
         try {
             $this->beforeIterate();
             $this->iterate();
+            $this->afterIterate();
         } catch (\Exception $error) {
-            $this->logError($error->getMessage(), [$error]);
+            $this->logger->error($error->getMessage(), [$error]);
         }
         $this->teardown();
-    }
-
-    /**
-     * Records activity in the db
-     *
-     * @throws \Doctrine\ORM\OptimisticLockException
-     */
-    protected function checkin()
-    {
-        if ($this->shouldCheckin) {
-            /** @var EntityManager $manager */
-            $manager = $this->getManager();
-            /** @var Daemon $daemon */
-            $daemon = $manager->getRepository('BozoslivehereSupervisorDaemonBundle:Daemon')->findOneBy([
-                'name' => $this->getName(),
-                'host' => gethostname()
-            ]);
-            if (empty($daemon)) {
-                $this->terminate('Daemon not found in database.', 'error');
-            } else {
-                $now = new \DateTime('now', new \DateTimeZone("UTC"));
-                $daemon->setPid(getmypid())->setLastCheckin($now);
-                $manager->persist($daemon);
-                $manager->flush();
-                $manager->clear();
-            }
-        }
     }
 
     /**
@@ -225,54 +191,9 @@ abstract class SupervisorDaemon
         }
         foreach (self::$sigHandlers as $signal => $handler) {
             if (!pcntl_signal($signal, $handler)) {
-                $this->logInfo('Could not bind signal: ' . $signal);
+                $this->logger->info('Could not bind signal: ' . $signal);
             }
         }
-    }
-
-    public function setLogger(Logger $logger) {
-        $this->logger = $logger;
-    }
-
-    private function disconnect()
-    {
-        $this->manager->getConnection()->close();
-    }
-
-    private function connect()
-    {
-        if ($this->manager->getConnection()->isConnected()) {
-            $this->manager->getConnection()->close();
-        }
-        $this->manager->getConnection()->connect();
-    }
-
-    /**
-     * Gets an entity manager, will also reconnect if connection was lost somehow
-     *
-     * @return EntityManager
-     */
-    protected function getManager()
-    {
-        /** @var EntityManager $manager */
-        if (empty($this->manager)) {
-            $this->manager = $this->container->get('doctrine.orm.entity_manager');
-        }
-        if (!$this->manager->getConnection()->isConnected() || $this->manager->getConnection()->ping() === false) {
-            $this->connect();
-        }
-        return $this->manager;
-    }
-
-    /**
-     * Sets the service container
-     * @param ContainerInterface $container
-     * @return SupervisorDaemon
-     */
-    protected function setContainer(ContainerInterface $container): SupervisorDaemon
-    {
-        $this->container = $container;
-        return $this;
     }
 
     /**
@@ -283,21 +204,17 @@ abstract class SupervisorDaemon
     }
 
     /**
-     * Called internaly before setup
-     */
-    private function beforeSetup() {
-        $this->logDebug('Setting up', ['pid' => $this->pid]);
-    }
-
-    /**
      * Will be called before main loop starts
      */
     protected function setup()
     {
     }
 
-    private function beforeIterate() {
-        $this->logDebug('Iterating');
+    /**
+     * Called before each iteration
+     */
+    protected function beforeIterate()
+    {
     }
 
     /**
@@ -307,6 +224,13 @@ abstract class SupervisorDaemon
      * @return mixed
      */
     abstract protected function iterate();
+
+    /**
+     * Called after each iteration
+     */
+    protected function afterIterate()
+    {
+    }
 
     /**
      * @return string service id for this daemon
@@ -330,7 +254,6 @@ abstract class SupervisorDaemon
     protected function teardown()
     {
         if (!$this->torndown) {
-            $this->logDebug('Torn down', ['pid' => $this->pid]);
             $this->torndown = true;
         }
     }
@@ -346,16 +269,16 @@ abstract class SupervisorDaemon
         if (!empty($message)) {
             switch ($state) {
                 case self::EXIT_STATE_INFO:
-                    $this->logInfo($message, ['pid' => $this->pid]);
+                    $this->logger->info($message, ['pid' => $this->pid]);
                     break;
                 case self::EXIT_STATE_DEBUG:
-                    $this->logDebug($message, ['pid' => $this->pid]);
+                    $this->logger->debug($message, ['pid' => $this->pid]);
                     break;
                 case self::EXIT_STATE_ERROR:
-                    $this->logError($message, ['pid' => $this->pid]);
+                    $this->logger->error($message, ['pid' => $this->pid]);
                     break;
                 default:
-                    $this->logError("Illegal termination state: $state with message: $message", ['pid' => $this->pid]);
+                    $this->logger->error("Illegal termination state: $state with message: $message", ['pid' => $this->pid]);
                     break;
             }
         }
@@ -456,26 +379,6 @@ abstract class SupervisorDaemon
             }
         }
         $this->reload();
-        if ($this->shouldCheckin) {
-            /** @var EntityManager $manager */
-            $manager = $this->container->get('doctrine.orm.entity_manager');
-            /** @var Daemon $daemon */
-            $daemon = $manager->getRepository('BozoslivehereSupervisorDaemonBundle:Daemon')->findOneBy([
-                'name' => $this->getName(),
-                'host' => gethostname()
-            ]);
-            if (empty($daemon)) {
-                $now = new \DateTime('now', new \DateTimeZone("UTC"));
-                $daemon = new Daemon();
-                $daemon
-                    ->setName($this->getName())
-                    ->setHost(gethostname())
-                    ->setLastCheckin($now);
-                $manager->persist($daemon);
-                $manager->flush();
-            }
-        }
-
         return $this->isInstalled();
     }
 
@@ -490,45 +393,21 @@ abstract class SupervisorDaemon
         $this->stop();
         $conf = $this->getConfName();
         if (!unlink($conf)) {
-            $this->logError($conf . ' could not be deleted');
+            $this->logger->error($conf . ' could not be deleted');
             return false;
         }
         $this->reload();
-        if ($this->shouldCheckin) {
-            /** @var EntityManager $manager */
-            $manager = $this->container->get('doctrine.orm.entity_manager');
-            /** @var Daemon $daemon */
-            $daemon = $manager->getRepository('BozoslivehereSupervisorDaemonBundle:Daemon')->findOneBy([
-                'name' => $this->getName(),
-                'host' => gethostname()
-            ]);
-            if (!empty($daemon)) {
-                $manager->remove($daemon);
-                $manager->flush();
-            }
-        }
         return true;
     }
 
     /**
-     * Retrieves our process id from the daemons table
+     * Retrieves our process id
      *
      * @return int
      */
     public function getPid()
     {
-        $pid = 0;
-        /** @var EntityManager $manager */
-        $manager = $this->container->get('doctrine.orm.entity_manager');
-        /** @var Daemon $daemon */
-        $daemon = $manager->getRepository('BozoslivehereSupervisorDaemonBundle:Daemon')->findOneBy([
-            'name' => $this->getName(),
-            'host' => gethostname()
-        ]);
-        if (!empty($daemon)) {
-            $pid = $daemon->getPid();
-        }
-        return $pid;
+        return getmypid();
     }
 
     /**
@@ -648,11 +527,13 @@ abstract class SupervisorDaemon
         return $errors;
     }
 
-    public function isAutostart() {
+    public function isAutostart()
+    {
         return $this->autostart;
     }
 
-    public function setAutostart($autostart) {
+    public function setAutostart($autostart)
+    {
         $this->autostart = $autostart;
     }
 
@@ -666,28 +547,6 @@ abstract class SupervisorDaemon
         $clean = strtolower(trim($clean, '-'));
         $clean = preg_replace("/[\/_|+ -]+/", $delimiter, $clean);
         return trim($clean);
-    }
-
-    protected function logInfo($message, $context = []) {
-        if (!empty($this->logger)) {
-            $context['pid'] = $this->getPid();
-            $this->logger->addInfo($this->getName() . ': '. $message, $context);
-        }
-    }
-
-    protected function logDebug($message, $context = []) {
-        if (!empty($this->logger)) {
-            $context['pid'] = $this->getPid();
-            $this->logger->addDebug($this->getName() . ': '. $message, $context);
-        }
-    }
-
-    protected function logError($message, $context = []) {
-        if (!empty($this->logger)) {
-            $context['pid'] = $this->getPid();
-            $this->logger->addError($this->getName() . ': '. $message, $context);
-        }
-        $this->error($message);
     }
 
 }
